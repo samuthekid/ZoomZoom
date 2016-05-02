@@ -1,0 +1,30 @@
+{
+  "name": "ZoomZoom",
+  "version": "0.0",
+  "author": "Samuel Nunes",
+  "browser_action": {
+    "default_title": "ZoomZoom"
+  },
+  "content_scripts": [
+    {
+      "js": [ "main.js" ],
+      "matches": [ "*://*/*" ]
+    }
+  ],
+
+  "content_security_policy": "script-src 'self'; object-src 'self'",
+  "locale": "en",
+  "default_locale": "en",
+  "description": "ZoomZoom",
+
+  "permissions": [ "*://*/*" ],
+  "icons": {
+    "128": "icon_128.png",
+    "48": "icon_48.png",
+    "16": "icon_16.png"
+  },
+  "minimum_edge_version": "37.14316.1000.0",
+  "web_accessible_resources": [ "icon_48.png" ]
+
+}
+
