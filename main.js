@@ -1,14 +1,14 @@
 
 var iDiv = document.createElement('div');
 var iImg = document.createElement('img');
-var iVid = document.createElement('video');
-var iSrc = document.createElement('source');
 var xBody = document.body;
 var content = "notfound";
-var dist = 10;
+var old_content = "notfound";
+var dist = 25;
 var type = "";
 var iOld = "";
 var iTarget = null;
+var loaded = 0;
 
 var tw = 0;
 var th = 0;
@@ -20,7 +20,7 @@ var window_x = window.innerWidth;
 var window_y = window.innerHeight;
 
 function initialStuff(){
-	iDiv.id = 'woow';
+	iDiv.id = 'notthat';
 	iDiv.className = 'woow';
 	iDiv.style.display = 'none';
 	iDiv.style.position = 'fixed';
@@ -28,26 +28,17 @@ function initialStuff(){
 	iDiv.style.left = "100px";
 	iDiv.style.top = "100px";
 	iDiv.style.zIndex = '10000';
+	iDiv.style.pointerEvents = "none";
 	xBody.appendChild(iDiv);
-	iImg.id = 'immg';
+	iImg.id = 'notthat';
 	iImg.className = 'immg';
 	iImg.style.borderStyle = 'solid';
 	iImg.style.borderColor = '#DDD';
 	iImg.style.borderWidth = '2px';
 	iImg.style.display = 'none';
+	iImg.addEventListener("load", contentLoaded);
 	iImg.src = '';
 	iDiv.appendChild(iImg);
-	iVid.id = 'viid';
-	iVid.className = 'viid';
-	iVid.style.borderStyle = 'solid;';
-	iVid.style.borderColor = '#DDD;';
-	iVid.style.borderWidth = '2px';
-	iVid.style.display = 'none';
-	iSrc.id = 'srrc';
-	iSrc.className = 'srrc';
-	iSrc.type = 'video/webm';
-	//iVid.appendChild(iSrc);
-	iDiv.appendChild(iVid);
 }
 
 function resize(){
@@ -55,50 +46,78 @@ function resize(){
 	window_y = window.innerHeight;
 }
 
-function getUrl(elem){
+function getSource(elem){
 	var url = window.location.href;
-
-	var src = elem.src;
 	var r = "notfound";
-	if(url.indexOf("reddit.com") != -1){
-		if(elem.tagName == "IMG"){
-			type = "IMG";
-			if(elem.parentElement != null){
-				if(elem.parentElement.href.indexOf(".jpg") || elem.parentElement.href.indexOf(".gif") || elem.parentElement.href.indexOf(".png") || elem.parentElement.href.indexOf(".gifv")){
-					r = elem.parentElement.href.replace("http", "https");
-				}
+
+	if(elem.tagName == "IMG"){
+		if(elem.parentElement != null){
+			if(elem.parentElement.tagName == "A"){
+				r = elem.parentElement.href;
+			}else{
+				r = elem.src;
 			}
+		}else{
+			r = elem.src;
 		}
-	}else if(url.indexOf("9gag.com") != -1){
-		if(elem.tagName == "IMG"){
-			type = "IMG";
-			r = src.replace("460s","700b");
-		}else if(elem.tagName == "VIDEO"){
-			type = "VIDEO";
-			r = elem.childNodes[3].src;
+	}else if(elem.tagName == "A"){
+		r = elem.href;
+	}else{
+		if(elem.parentElement != null){
+			if(elem.parentElement.tagName == "A"){
+				r = elem.parentElement.href;
+			}else{
+				r = "notfound";
+			}
+		}else{
+			r = "notfound";
 		}
 	}
-	//console.log("url: "+url+" | src: "+r);
+
+	//console.log("url : "+url);
+	//console.log("src : "+r);
 	return r;
 }
 
-function getWidth(elem){
-	tw = elem.width;
-	if(tw != 0 && tw != null && tw != undefined) return;
-	tw = elem.style.width.substring(0,elem.style.width.length-2);
-	if(tw != 0 && tw != null && tw != undefined) return;
-	tw = elem.style.minWidth.substring(0,elem.style.minWidth.length-2);
+function urlCompose(link){
+	var url = window.location.href;
+	var l = link;
+
+	if(l.indexOf("9gag.com") != -1){
+		type = "IMG";
+		l = "https://img-9gag-fun.9cache.com/photo/"+l.split("/gag/")[1]+"_700b.jpg";
+	}else if(l.indexOf("i.imgur.com") != -1){
+		// preciso tratar dos outros formatos
+		type = "IMG";
+		l = l;
+	}else if(l.indexOf("imgur.com") != -1){
+		// preciso tratar dos outros formatos
+		type = "IMG";
+		l = "https://i.imgur.com/"+l.split(".com/")[1]+".jpg";
+	}else if(l.indexOf("youtube.com/watch?") != -1){
+		type = "IFRAME";
+		l = "https://youtube.com/embed/"+l.split("v=")[1].substring(0,11)+"/?autoplay=1";
+	}else if(l.indexOf(".jpg") != -1 || l.indexOf(".png") != -1 || l.indexOf(".gif") != -1){
+		type = "IMG";
+	}else{
+		l = "notfound";
+	}
+
+	if(l.indexOf("https://") == -1) l = l.replace("http://","https://");
+	//console.log("link: "+l);
+	return l;
 }
 
-function getHeight(elem){
-	th = elem.height;
-	if(th != 0 && th != null && th != undefined) return;
-	th = elem.style.height.substring(0,elem.style.height.length-2);
-	if(th != 0 && th != null && th != undefined) return;
-	th = elem.style.minHeight.substring(0,elem.style.minHeight.length-2);
+function contentLoaded(e){
+	//console.log("Content Loaded!");
+	loaded = 1;
+	th = e.target.height;
+	tw = e.target.width;
+	display();
 }
 
 function mousemove(){
+
 	mouse_x = event.clientX;
 	mouse_y = event.clientY;
 	//console.log("X = "+mouse_x+" | Y = "+mouse_y);
@@ -106,76 +125,59 @@ function mousemove(){
 
 	if(iOld != iTarget){
 		iOld = iTarget;
-    	content = getUrl(iTarget);
-		console.log("New element! "+iTarget);
+    	content = getSource(iTarget);
+    	content = urlCompose(content);
+    	console.log("New element "+iTarget.tagName+" | Type="+type+" | Content="+content);
 	}
 
     if(content != "notfound"){
-    	if(type == "IMG"){
-			iImg.src = content;
-			iImg.style.display = 'block';
-			getWidth(iImg);
-    		getHeight(iImg);
-		}else{
-			iImg.style.display = 'none';
-		}
-		
-		if(type == "VIDEO"){
-			iSrc.src = content;
-			iVid.appendChild(iSrc);
-			iVid.style.display = 'block';
-			getWidth(iVid);
-    		getHeight(iVid);
-		}else{
-			iVid.style.display = 'none';
-		}
-    	console.log("W: "+tw+" | H: "+th);
-    	display(iTarget);
+    	if(content != old_content){
+	    	old_content = content;
+    		console.log("New content!");
+
+	    	if(type == "IMG"){
+				iImg.src = content;
+				iImg.style.display = 'block';
+			}else{
+				iImg.style.display = 'none';
+			}
+    	}
+    	if(loaded == 1) display();
     }else{
     	dontdisplay();
-    }
-	
+	}
 }
 
 function display(elem){
-	var opt = 0;
-	var rq1 = ((window_y-dist-dist)/th)<(((window_x-mouse_x)-dist-dist)/tw)?((window_y-dist-dist)/th):(((window_x-mouse_x)-dist-dist)/tw);
-	var rq2 = ((window_y-dist-dist)/th)<((mouse_x-dist-dist)/tw)?((window_y-dist-dist)/th):((mouse_x-dist-dist)/tw);
-	var rq3 = ((mouse_y-dist-dist)/th)<((window_x-dist-dist)/tw)?((mouse_y-dist-dist)/th):((window_x-dist-dist)/tw);
-	var rq4 = (((window_y-mouse_y)-dist-dist)/th)<((window_x-dist-dist)/tw)?(((window_y-mouse_y)-dist-dist)/th):((window_x-dist-dist)/tw);
 
+	var rq = new Array(4);
+	rq[0] = ((window_y-dist-dist)/th)<(((window_x-mouse_x)-dist-dist)/tw)?((window_y-dist-dist)/th):(((window_x-mouse_x)-dist-dist)/tw);
+	rq[1] = ((window_y-dist-dist)/th)<((mouse_x-dist-dist)/tw)?((window_y-dist-dist)/th):((mouse_x-dist-dist)/tw);
+	rq[2] = ((mouse_y-dist-dist)/th)<((window_x-dist-dist)/tw)?((mouse_y-dist-dist)/th):((window_x-dist-dist)/tw);
+	rq[3] = (((window_y-mouse_y)-dist-dist)/th)<((window_x-dist-dist)/tw)?(((window_y-mouse_y)-dist-dist)/th):((window_x-dist-dist)/tw);
+
+	var opt = -1;
 	var tmp = 0.0;
-
-	if(rq1>tmp){
-		tmp = rq1;
-		opt = 1;
-	}
-	if(rq2>tmp){
-		tmp = rq2;
-		opt = 2;
-	}
-	if(rq3>tmp){
-		tmp = rq3;
-		opt = 3;
-	}
-	if(rq4>tmp){
-		tmp = rq4;
-		opt = 4;
+	for(var i=0; i<rq.length; i++) { 
+		if(rq[i]>tmp){
+			opt = i;
+			tmp = rq[i];
+		}
 	}
 
-	var width = (tw*tmp);
-	var height = (th*tmp);
+	var width = parseInt(tw*tmp);
+	var height = parseInt(th*tmp);
 
 	var left = 0;
 	var top = 0;
 
-	if(opt == 1){
+	if(opt == 0){
 		top = (mouse_y-(height/2));
 		left = (mouse_x+dist);
-	}else if(opt == 2){
+	}else if(opt == 1){
 		top = (mouse_y-(height/2));
 		left = (mouse_x-dist-width);
-	}else if(opt == 3){
+	}else if(opt == 2){
 		left = (mouse_x-(width/2));
 		top = (mouse_y-dist-height);
 	}else{
@@ -189,28 +191,31 @@ function display(elem){
 	if(left+width>window_x-dist) left = window_x-width-dist;
 
 	if(type == "IMG"){
-		iImg.style.maxWidth = width+"px";
-		iImg.style.maxHeight = height+"px";
-	}else if(type == "VIDEO"){
-		iVid.style.maxWidth = width+"px";
-		iVid.style.maxHeight = height+"px";
-		iVid.load();
-		iVid.play();
+		iImg.width = width;
+		iImg.height = height;
 	}
 	iDiv.style.top = top+"px";
 	iDiv.style.left = left+"px";
 	iDiv.style.display = 'block';
+
+	//console.log("RACIO = "+tmp+" | OPT = "+opt);
+	//console.log("O_W: "+tw+" | O_H: "+th);
+	//console.log("N_W: "+width+" | N_H: "+height);
 }
 
 function dontdisplay(){
 	iImg.src = '';
+	iImg.removeAttribute("width");
+	iImg.removeAttribute("height");
 	iImg.style.display = 'none';
-	iVid.src = '';
-	iVid.style.display = 'none';
-	//iVid.removeChild(iSrc);
-	iDiv.style.display = 'none';
+	type = "";
+	loaded = 0;
+	tw = 0;
+	th = 0;
+	old_content = "notfound";
 }
 
+alert("ON");
 initialStuff();
 document.addEventListener("mousemove",mousemove);
 window.addEventListener("resize",resize);
