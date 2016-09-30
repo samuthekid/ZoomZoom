@@ -10,12 +10,17 @@ var zz = {
 	// atual url and last url
 	old_url: "notfound",
 	url: "notfound",
+	target : null,
+
+	// preview links
+	previewLinks: 0,
 
 	// distance to window borders
 	dist: 25,
 
 	// media type
 	type: "",
+	old_media: "",
 	media: "",
 	gallery: [],
 	gallery_i: 0,
@@ -51,6 +56,7 @@ var zz = {
 
 	// black list
 	blackList: ["reddit.com/domain/",
+				"reddit.com/?",
 				"reddit.com/user/"],
 
 	// key presses
@@ -60,10 +66,16 @@ var zz = {
 		var prevent = true;
 		//alert(code);
 		
-		if(code == 32){ // SPACE
+
+		// SPACE --- play/pause --- scroll down img --- load iframe/video --- unfix iframe/video
+		if(code == 32){
 			if(this.type == "VID"){
-				if(this.iVid.paused) this.iVid.play();
-				else this.iVid.pause();
+				if(this.iVid.paused){
+					this.iVid.play();
+				}else{
+					$.notify("Paused", "info");
+					this.iVid.pause();
+				}
 			}else if(this.type == "IMG"){
 				if(this.full_size == 1 && this.scrollable == 1){
 					this.scrollable_x -=this.scrollable_delta;
@@ -72,15 +84,24 @@ var zz = {
 						}, 200, function(){});
 				}
 				if(this.media.includes("thumbnail.ws/output/")){
-					//browser.tabs.create({url:this.url});
-					window.location = this.url;
+					this.type = "FRA";
+					this.old_url = "notfound";
+					this.old_media = "";
+					iDesc.innerText = "";
+					iCnt.innerText = "";
+					this.fixed = 1;
+					$.notify("Loading page", "info");
+					this.loadContent(this.url,this.url);
 				}
 			}else if(this.type == "YOU" && this.media.includes("i.ytimg.com/vi/")){
 				this.cleanUp();
 				iDesc.innerText = "";
 				iCnt.innerText = "";
-				this.loadContent("https://www.youtube.com/embed/"+this.media.substring(23,34),this.url);
 				this.fixed = 1;
+				var parts = this.getVars(this.media);
+				var link = "https://www.youtube.com/embed/"+this.media.substring(23,34)+(parts.t?"?start="+parts.t:"");
+				$.notify("Loading video", "info");
+				this.loadContent(link,this.url);
 			}else if(this.type == "YOU" && this.media.includes("youtube.com/embed")){
 				this.fixed = 0;
 				this.mouseOut();
@@ -88,11 +109,19 @@ var zz = {
 				this.fixed = 0;
 				this.mouseOut();
 			}
-		}else if(code == 118){ // V
+
+
+		// V --- real/adapted size
+		}else if(code == 118){
 			this.full_size = 1-this.full_size;
 			this.scrollable_x = 0;
+			if(this.full_size == 1) $.notify("Real size", "info");
+			else $.notify("Adapted size", "info");
 			this.display();
-		}else if(code == 98){ // B
+
+
+		// B --- scroll up img
+		}else if(code == 98){
 			if(this.type == "IMG" && this.full_size == 1 && this.scrollable == 1){
 				this.scrollable_x +=this.scrollable_delta;
 				$("#iDiv").animate({
@@ -100,11 +129,20 @@ var zz = {
 					}, 200, function(){});
 			}
 
-		}else if(code == 102){ // F
+
+		// F --- fix/unfix
+		}else if(code == 102){
 			this.fixed = 1-this.fixed;
-			if(this.fixed == 0) this.mouseOut();
-		
-		}else if(code == 110){ // N
+			if(this.fixed == 0){
+				$.notify("Unfixed", "info");
+				this.mouseOut();
+			}else{
+				$.notify("Fixed", "info");
+			}
+
+
+		// N --- previous item in gallery
+		}else if(code == 110){
 			if(this.gallery.length < 2) return false;
 			this.gallery_i-=1;
 			if(this.gallery_i < 0) this.gallery_i += this.gallery.length;
@@ -115,9 +153,11 @@ var zz = {
 			iDesc.innerText = ((tmp.title)?tmp.title:"")+((tmp.description)?" - "+tmp.description:"");
 			if(tmp.mp4) tmp = tmp.mp4;
 			else tmp = tmp.link;
-			this.loadContent(tmp,this.url);
-		
-		}else if(code == 109){ // M
+			this.formatFinder(tmp,this.url);
+
+
+		// M --- next item in gallery
+		}else if(code == 109){
 			if(this.gallery.length < 2) return false;
 			this.gallery_i+=1;
 			this.gallery_i%=this.gallery.length;
@@ -128,11 +168,29 @@ var zz = {
 			iDesc.innerText = ((tmp.title)?tmp.title:"")+((tmp.description)?" - "+tmp.description:"");
 			if(tmp.mp4) tmp = tmp.mp4;
 			else tmp = tmp.link;
-			this.loadContent(tmp,this.url);
-		}else if(code == 100){ // D
+			this.formatFinder(tmp,this.url);
+
+
+		// D --- toggle description
+		}else if(code == 100){
 			if(iDesc.innerText == "") return false;
 			if(iDesc.style.display == "block") iDesc.style.display = "none";
 			else iDesc.style.display = "block";
+			$.notify("Description hidden", "info");
+
+
+		// T --- open in new tab
+		}else if(code == 116){
+			window.open(this.media, '_blank');
+
+
+		// S --- save content
+		}else if(code == 115){
+			var name = this.media.split("/");
+			name = name[name.length-1];	
+			var a = $("<a>").attr("href", this.media).attr("download", name).appendTo("body");
+			a[0].click();
+			a.remove();
 		}
 
 		if(prevent) e.preventDefault();
@@ -201,10 +259,14 @@ var zz = {
 		console.log("INITIATE");
 
 		// adds the events to all links
-		$("a").mouseover(this.mouseOverLink.bind(this));
-		$("a").mouseout(this.mouseOut.bind(this));
-		// adds the event to all imgs
-		$("img").mouseover(this.mouseOverImg.bind(this));
+		$(document).on('mouseover', 'a', this.mouseOverLink.bind(this));
+		$(document).on('mouseout', 'a', this.mouseOut.bind(this));
+		// adds the events to all imgs
+		$(document).on('mouseover', 'img', this.mouseOverOther.bind(this));
+		$(document).on('mouseout', 'img', this.mouseOut.bind(this));
+		// adds the events to all videos
+		$(document).on('mouseover', 'video', this.mouseOverOther.bind(this));
+		$(document).on('mouseout', 'video', this.mouseOut.bind(this));
 		// function to update window size
 		window.addEventListener("resize", this.resizeWindow.bind(this));
 		// function to update mouse position
@@ -224,6 +286,7 @@ var zz = {
 		iLoad.style.top = 10;
 		iLoad.style.left = 10;
 		iLoad.style.display = 'none';
+		iLoad.style.zIndex = '99997';
 		iLoad.src = browser.extension.getURL("loading.gif");
 
 		xBody.appendChild(iLoad);
@@ -236,7 +299,7 @@ var zz = {
 		iDiv.style.borderWidth = '2px';
 		iDiv.style.overflow = 'hidden';
 		iDiv.style.position = 'fixed';
-		iDiv.style.zIndex = '9999';
+		iDiv.style.zIndex = '99995';
 		//iDiv.style.pointerEvents = 'none';
 
 		xBody.appendChild(iDiv);
@@ -250,7 +313,7 @@ var zz = {
 		iDesc.style.padding = '5px';
 		iDesc.style.backgroundColor = 'rgba(0, 0, 0, 0.4)';
 		iDesc.style.color = '#fff';
-		iDesc.zIndex = '9999';
+		iDesc.zIndex = '99996';
 		iDesc.style.fontFamily = 'Tahoma';
 		iDesc.style.fontSize = '150%';
 
@@ -265,7 +328,7 @@ var zz = {
 		iCnt.style.padding = '5px';
 		iCnt.style.backgroundColor = 'rgba(0, 0, 0, 0.4)';
 		iCnt.style.color = '#fff';
-		iCnt.zIndex = '9999';
+		iCnt.zIndex = '99996';
 		iCnt.style.fontFamily = 'Tahoma';
 		iCnt.style.fontSize = '150%';
 
@@ -291,20 +354,28 @@ var zz = {
 		}
 	},
 
-	handler9gag: function(url){
-		var site = url;
-		console.log("9GAG HANDLER "+url);
-		//type = "IMG"; ou gif!!!
-		// TEMP SOLUTION
-		var media = "https://img-9gag-fun.9cache.com/photo/"+url.split("/gag/")[1]+"_700b.jpg";
-		this.loadContent(media,site);
+	// GOES TO FormatFinder
+	handler9gag: function(med,url){
+		var that = this;
+		var id = med.split("/gag/")[1];
+		var id = id.split("?")[0];
+		//console.log("9GAG HANDLER "+id);
+		if(id == null || id == "") return false;
+		var img = "http://img-9gag-fun.9cache.com/photo/"+id+"_700b.jpg";
+		var vid = "http://img-9gag-fun.9cache.com/photo/"+id+"_460sv.mp4";
+		$.get(vid)
+			.done(function(){
+				that.formatFinder(vid,url);
+			}).fail(function(){
+				that.formatFinder(img,url);
+			})
 	},
 
-	handlerImgur: function(url,tt){
+	// GOES TO FormatFinder
+	handlerImgur: function(med,url,tt){
 		var that = this;
-		var site = url;
 		var id = "";
-		var parts = url.split("/");
+		var parts = med.split("/");
 		$.each(parts, function(i,x){
 			if(x.includes("imgur.com")){
 				if(parts[i+1] == "a" || parts[i+1] == "gallery") id = parts[i+2];
@@ -313,11 +384,11 @@ var zz = {
 		});
 		if(id.includes(".")) id = id.split(".")[0];
 		var apiEndPoint = "https://api.imgur.com/3/";
-		console.log("IMGUR HANDLER "+id);
+		//console.log("IMGUR HANDLER "+id);
 		if(id != ""){
-			if(url.includes("/a/") || url.includes("/gallery/")){
-				if(url.includes("/a/")) apiEndPoint+="album/";
-				else if(url.includes("/gallery/")) apiEndPoint+="gallery/";
+			if(med.includes("/a/") || med.includes("/gallery/")){
+				if(med.includes("/a/")) apiEndPoint+="album/";
+				else if(med.includes("/gallery/")) apiEndPoint+="gallery/";
 				$.ajax({
 					url: apiEndPoint+id,
 					headers: {'Authorization': 'Client-ID 3c97f149c982123',},
@@ -326,32 +397,34 @@ var zz = {
 							// more than 1 img
 							$.each(res.data.images, function(i,x){that.gallery.push(x);});
 							that.gallery_i = 0;
-							if(that.gallery[0].mp4) url = that.gallery[0].mp4;
-							else url = that.gallery[0].link;
+							if(res.data.gifv) med = that.gallery[0].gifv;
+							else if(res.data.mp4) med = that.gallery[0].mp4;
+							else med = that.gallery[0].link;
 							if(that.gallery[0].title) iDesc.innerText = that.gallery[0].title;
 							if(that.gallery[0].description) iDesc.innerText += " - " + that.gallery[0].description;
 							if(that.gallery.length > 1) iCnt.innerText = that.gallery_i+1+"/"+that.gallery.length;
 						}else{
 							// just 1 img
-							if(res.data.mp4) url = res.data.mp4;
-							else url = res.data.link;
+							if(res.data.gifv) med = res.data.gifv;
+							else if(res.data.mp4) med = res.data.mp4;
+							else med = res.data.link;
 							if(res.data.title) iDesc.innerText = res.data.title;
 							if(res.data.description) iDesc.innerText += " - " + res.data.description;
 						}
-						that.loadContent(url,site);
+						that.formatFinder(med,url);
 					},
 					error: function(res){
 						if(tt<3){
-							if(url.includes("/a/")){
-								url = url.replace("/a/","/gallery/");
-							}else if(url.includes("/gallery/")){
-								url = url.replace("/gallery/","/a/");
+							if(med.includes("/a/")){
+								med = med.replace("/a/","/gallery/");
+							}else if(med.includes("/gallery/")){
+								med = med.replace("/gallery/","/a/");
 							}
-							url = that.handlerImgur(url,tt+1);
+							that.handlerImgur(med,url,tt+1);
 						}else{
-							url = "igiveup";
+							med = "igiveup";
+							that.formatFinder(med,url);
 						}
-						that.loadContent(url,site);
 					},
 				});
 			}else{
@@ -359,22 +432,23 @@ var zz = {
 					url: apiEndPoint+"image/"+id,
 					headers: {'Authorization': 'Client-ID 3c97f149c982123',},
 					success: function(res){
-						if(res.data.mp4) url = res.data.mp4;
-						else url = res.data.link;
+						if(res.data.gifv) med = res.data.gifv;
+						else if(res.data.mp4) med = res.data.mp4;
+						else med = res.data.link;
 						if(res.data.title) iDesc.innerText = res.data.title;
 						if(res.data.description) iDesc.innerText += " - " + res.data.description;
-						that.loadContent(url,site);
+						that.formatFinder(med,url);
 					}
 				});
 			}
 		}
 	},
 
-	handlerGfycat: function(url){
+	// GOES TO FormatFinder
+	handlerGfycat: function(med,url){
 		var that = this;
-		var site = url;
 		var id = "";
-		var parts = url.split("/");
+		var parts = med.split("/");
 		$.each(parts, function(i,x){
 			if(x.includes("gfycat.com")){
 				if(parts[i+1] != null){
@@ -382,43 +456,43 @@ var zz = {
 				}
 			}
 		});
-		console.log("GFYCAT HANDLER "+id);
+		//console.log("GFYCAT HANDLER "+id);
 		if(id != ""){
 			$.ajax({
 				url: "http://gfycat.com/cajax/get/"+id,
 				success: function(res){
-					if(res.gfyItem.mp4Url) url = res.gfyItem.mp4Url;
-					else url = "igiveup";
-					that.loadContent(url,site);
+					if(res.gfyItem.mp4Url) med = res.gfyItem.mp4Url;
+					else med = "igiveup";
+					that.formatFinder(med,url);
 				},
 				error: function(res){
-					that.loadContent("igiveup",site);
+					that.formatFinder("igiveup",url);
 				}
 			});
 			
 		}
 	},
 
-	handlerYoutube: function(url){
+	// GOES TO FormatFinder
+	handlerYoutube: function(med,url){
+		this.type = "YOU";
 		var id = "";
-		var site = url;
-		var vars = this.getVars(url);
-		if(url.includes("youtube.com")){
+		var vars = this.getVars(med);
+		if(med.includes("youtube.com")){
 			if(vars.v) id = vars.v;
-		}else if(url.includes("youtu.be")){
-			id = url.split("/")[3];
+		}else if(med.includes("youtu.be")){
+			id = med.split("/")[3].split("?")[0];
 		}
-		console.log("YOUTUBE HANDLER "+id);
-		if(id == "" || id.length != 11) url = "igiveup";
-		else url = "https://i.ytimg.com/vi/"+id+"/mqdefault.jpg";
-		iDesc.innerText = "Press [SPACE] to LOAD and FIX the video!";
-		this.loadContent(url,site);
+		//console.log("YOUTUBE HANDLER "+id);
+		if(id == "" || id.length != 11) med = "igiveup";
+		else med = "https://i.ytimg.com/vi/"+id+"/mqdefault.jpg"+(vars.t?"?t="+vars.t:"");
+		this.formatFinder(med,url);
 	},
 
-	handlerReddit: function(url){
+	// GOES TO FormatFinder AND LinkDistributor
+	handlerReddit: function(med,url){
 		var that = this;
-		var site = url;
-		var parts = url.split("/");
+		var parts = med.split("/");
 		var final = "";
 		var done = 0;
 		$.each(parts, function(i,x){
@@ -430,29 +504,47 @@ var zz = {
 				}
 			}
 		});
-		console.log("REDDIT HANDLER "+final);
+		//console.log("REDDIT HANDLER "+final);
 		$.ajax({
 			url: final,
 			success: function(res){
-				if(res[0].data.children[0].data.url) url = res[0].data.children[0].data.url;
-				else url = "igiveup";
-				if(url == that.url) that.type = "FRA";
-				that.loadContent(url,site);
+				if(res[0].data.children[0].data.url) med = res[0].data.children[0].data.url;
+				else med = "igiveup";
+				if(med.includes(that.url) || that.url.includes(med)) that.handlerRedditComments(med,url);
+				else that.linkDistributor(med,url);
 			},
 			error: function(res){
-				that.loadContent("igiveup",site);
+				that.formatFinder("igiveup",url);
 			}
 		});
 	},
 
-	handlerRedditComments: function(url){
+	// GOES TO LoadContent
+	handlerRedditComments: function(med,url){
 		this.type = "FRA";
-		this.loadContent(url,url);
+		this.loadContent(med,url);
 	},
 
-	handlerPreview: function(url){
+	// GOES TO LoadContent
+	handlerVidMe: function(med,url){
+		this.type = "FRA";
+		med = med.replace("vid.me/","vid.me/e/");
+		this.loadContent(med,url);
+	},
+
+	// GOES TO LinkDistributor
+	handlerGoogleImgs: function(med,url){
+		this.type = "IMG";
+		var vars = this.getVars(med);
+		med = vars.imgurl;
+		med = decodeURIComponent(med);
+		console.log(med);
+		this.linkDistributor(med,url);
+	},
+
+	// GOES TO LinkDistributor
+	handlerPreview: function(med,url){
 		var that = this;
-		var site = url;
 		$.ajax({
 			url: "https://thumbnail.ws/get/thumbnail",
 			data: {
@@ -465,34 +557,20 @@ var zz = {
 				format: "JPEG"},
 			success: function(res){
 				if(res.screenshotUrl){
-					url = res.screenshotUrl;
-					iDesc.innerText = "Press [SPACE] to OPEN the website!";
+					med = res.screenshotUrl;
+					iDesc.innerText = "Press [SPACE] to PREVIEW the website!";
 				}
-				else url = "igiveup";
-				that.loadContent(url,site);
+				else med = "igiveup";
+				that.linkDistributor(med,url);
 			},
 			error: function(res){
-				that.loadContent("igiveup",site);
+				that.linkDistributor("igiveup",url);
 			}
 		});
 	},
 
-	// find format of link
-	formatFinder: function(url){
-		console.log("FORMAT FINDER");
-		if(url.includes("i.ytimg.com/vi/")){
-			this.type = "YOU";
-		}else if(url.includes(".gifv") || url.includes(".mp4") || url.includes(".webm")){
-			url = url.replace(".gifv",".mp4");
-			this.type = "VID";
-		}else if(url.includes(".jpeg") || url.includes(".jpg") || url.includes(".png") || url.includes(".gif")){
-			this.type = "IMG";
-		}
-		return url;
-	},
-
 	// mouse over image with href
-	mouseOverImg: function(e){
+	mouseOverOther: function(e){
 		e.target = $(e.target).closest("A")[0];
 		this.mouseOverLink(e);
 		return false;
@@ -503,7 +581,7 @@ var zz = {
 		if(this.fixed == 1) return false;
 		if(e.target.href == null || e.target.href === "" || 
 			e.target.href === window.location+"#" || e.target.href.includes("javascript:")){
-			console.log("Can't find or invalid target or href...");
+			//console.log("Can't find or invalid target or href...");
 			return false;
 		}
 
@@ -521,7 +599,7 @@ var zz = {
 		if(blackListed == 1) return false;
 
 		// updates only if is a different url
-		if(url == this.old_url){
+		if(url == this.old_url && this.type != ""){
 			console.log("SAME CONTENT!");
 			this.loadContent(this.media,this.url);
 		}else{
@@ -532,63 +610,125 @@ var zz = {
 			this.scrollable_x = 0;
 			this.gallery_i = 0;
 			this.gallery = [];
+			this.target = e.target;
+			this.media = "";
 			iDesc.innerText = "";
 			iCnt.innerText = "";
-
-			// show loading gif
-			iLoad.style.display = 'block';
 			
-			this.linkDistributor(e,url);
+			this.linkDistributor(url,url);
 		}
 	},
 
-	linkDistributor: function(e,url){
-		// choose option depending on the link
-		if(url.includes("imgur.com")){
-			this.handlerImgur(url,0);
-		
-		}else if(url.includes("i.reddituploads.com") || url.includes("i.redd.it")){
-			// TMP solution... not sure if is always an img
-			this.type = "IMG";
-			this.loadContent(url,url);
-		
-		}else if(url.includes("reddit.com/") && url.includes("/comments/")){
-			this.old_url = "notfound";
-			if(e.target.dataset.eventAction != "comments") this.handlerReddit(url);
-			else this.handlerRedditComments(url);
-		
-		}else if(url.includes("gfycat.com")){
-			this.handlerGfycat(url);
-		
-		}else if(url.includes("9gag.com")){
-			this.handler9gag(url);
-		
-		}else if(url.includes("youtube.com") || url.includes("youtu.be")){
+	// Chooses an option depending on the link
+	linkDistributor: function(med,url){
+
+		// mouse already out!
+		if(this.unload == 1) return false;
+		// another request has already passed here!
+		if(url != this.url) return false;
+		// debug here? nothing logged...
+		if(med == "igiveup") return false;
+
+		console.log("MEDIA="+med+" | OLD_MEDIA="+this.old_media);
+
+		if(med != this.old_media){
+
+			this.old_media = med;
+
+			// APIs
+			// filter the links that need to go through an API
+			if(med.toLowerCase().includes("imgur.com/")){
+				this.handlerImgur(med,url,0);
+			
+			}else if(med.toLowerCase().includes("reddit.com/") && med.toLowerCase().includes("/comments/")){
+				this.old_url = "notfound"; // forces to reload between content and comments
+				this.old_media = ""; // this too
+				if(this.target.dataset.eventAction != "comments") this.handlerReddit(med,url);
+				else this.handlerRedditComments(med,url);
+			
+			}else if(med.toLowerCase().includes("gfycat.com/")){
+				this.handlerGfycat(med,url);
+			
+			}else if(med.toLowerCase().includes("9gag.com/")){
+				this.handler9gag(med,url);
+			
+			}else if(med.toLowerCase().includes("vid.me/")){
+				this.handlerVidMe(med,url);
+			
+			}else if(med.toLowerCase().includes("youtube.com/") || med.toLowerCase().includes("youtu.be/")){
+				this.handlerYoutube(med,url);
+			
+			}else if(med.toLowerCase().includes("google.") && med.toLowerCase().includes("/imgres?")){
+				this.handlerGoogleImgs(med,url);
+
+			}else{
+				this.formatFinder(med,url);
+			}
+
+		}else{
+			this.formatFinder(med,url);
+		}
+	},
+
+	// Find the format for the media link
+	formatFinder: function(med,url){
+
+		// mouse already out!
+		if(this.unload == 1) return false;
+		// another request has already passed here!
+		if(url != this.url) return false;
+		// debug here? nothing logged...
+		if(med == "igiveup") return false;
+
+		iLoad.style.display = 'block';
+
+		// Media Types
+		if(med.toLowerCase().includes("i.ytimg.com/vi/")){
 			this.type = "YOU";
-			this.handlerYoutube(url);
+			iDesc.innerText = "Press [SPACE] to LOAD and FIX the video!";
+			this.loadContent(med,url);
+		
+		}else if(med.toLowerCase().includes("i.reddituploads.com")){
+			this.type = "IMG";
+			this.loadContent(med,url);
+		
+		}else if(med.toLowerCase().includes(".gifv")
+		 	|| med.toLowerCase().includes(".mp4") 
+		 	|| med.toLowerCase().includes(".webm")){
+			med = med.replace(".gifv",".mp4");
+			this.type = "VID";
+			this.loadContent(med,url);
+		
+		}else if(med.toLowerCase().includes(".jpeg") 
+			|| med.toLowerCase().includes(".jpg") 
+			|| med.toLowerCase().includes(".png") 
+			|| med.toLowerCase().includes(".gif")){
+			this.type = "IMG";
+			this.loadContent(med,url);
 		
 		}else{
-			this.handlerPreview(url);
+			if(this.previewLinks == 1){
+				this.type = "FRA";
+				this.handlerPreview(med,url);
+			}else iLoad.style.display = 'none';
 		}
+
 	},
 
-	// loads media content (final = media link; url = website)
+	// loads media content (media = media link; url = website)
 	loadContent: function(media, url){
 
-		if(url != this.url){
-			console.error("Another request just arrived... Late!");
-			return false;
-		}
-		this.media = media;
-		if(media == "igiveup") return false; // debug here? nothing logged...
-		if(this.unload == 1){
-			console.log("Mouse out! Unloaded!");
-			return false;
-		}
+		// mouse already out!
+		if(this.unload == 1) return false;
+		// another request has already passed here!
+		if(url != this.url) return false;
+		// debug here? nothing logged...
+		if(media == "igiveup") return false;
 
-		media = media.replace("http://","https://");
-		media = this.formatFinder(media);
-		console.log("TYPE="+this.type+" | URL="+this.url+" | MEDIA="+media);
+		console.log("TYPE="+this.type+" | MEDIA="+media+" | URL="+this.url);
+
+		//media = media.replace("http://","https://");
+		this.media = media;
 
 		if(this.type != "") iLoad.style.display = 'block';
 		this.cleanUp();
@@ -622,11 +762,13 @@ var zz = {
 
 	// when media is loaded, get sizes
 	contentLoaded: function(e){
+
+		// mouse already out!
+		if(this.unload == 1) return false;
+		// another request has already passed here!
+		if(e.target.src != this.media) return false;
+
 		console.log("TYPE="+this.type+" | Content Loaded! "+e.target.src);
-		if(this.unload == 1){
-			console.log("Mouse out! Unloaded!");
-			return false;
-		}
 
 		if(iDesc.innerText == "") iDesc.style.display = 'none';
 		else iDesc.style.display = 'block';
@@ -657,8 +799,8 @@ var zz = {
 
 			case "FRA":
 				this.fixed = 1;
-				this.th = this.video_x;
-				this.tw = this.video_y;
+				this.tw = this.video_x;
+				this.th = this.video_y;
 				break;
 		};
 
@@ -736,6 +878,10 @@ var zz = {
 		if(left+width>window_x-dist) left = window_x-width-dist;
 		if(left<dist) left = dist;
 
+		iDiv.style.top = top+this.scrollable_x+"px";
+		iDiv.style.left = left+"px";
+		iDiv.style.display = 'block';
+
 		switch(this.type){
 
 			case "IMG":
@@ -768,14 +914,10 @@ var zz = {
 
 			case "FRA":
 				this.iFra.style.display = 'block';
-				this.iFra.width = this.video_x;
-				this.iFra.height = this.video_y;
+				this.iFra.width = width;
+				this.iFra.height = height;
 				break;
 		}
-
-		iDiv.style.top = top+this.scrollable_x+"px";
-		iDiv.style.left = left+"px";
-		iDiv.style.display = 'block';
 
 		//console.log("RACIO = "+tmp+" | OPT = "+opt);
 		//console.log("O_W: "+tw+" | O_H: "+th);
@@ -798,6 +940,7 @@ var zz = {
 		this.cleanUp();
 		//console.log(this.iImg+" "+this.iVid+" "+this.iFra);
 
+		$("body").focus();
 		iDiv.style.display = 'none';
 
 		console.log("---------------------- LIMPO! ----------------------");
